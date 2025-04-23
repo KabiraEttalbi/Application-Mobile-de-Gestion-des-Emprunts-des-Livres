@@ -1,81 +1,106 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { type NextRequest, NextResponse } from "next/server"
+import { connectToDatabase } from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
+import { getUserFromRequest } from "@/lib/auth-helpers"
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { db } = await connectToDatabase();
-    const user = await db
-      .collection("users")
-      .findOne({ _id: new ObjectId(params.id) });
+    const user = getUserFromRequest(request)
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 
-    return NextResponse.json(user);
-  } catch (error) {
+    const id = params.id
+
+    if (!ObjectId.isValid(id)) {
+      return NextResponse.json({ success: false, message: "Invalid user ID" }, { status: 400 })
+    }
+
+    if (id !== user.id && user.role !== "admin") {
+      return NextResponse.json({ success: false, message: "Unauthorized access" }, { status: 403 })
+    }
+
+    const { db } = await connectToDatabase()
+    const targetUser = await db.collection("users").findOne({ _id: new ObjectId(id) }, { projection: { password: 0 } })
+
+    if (!targetUser) {
+      return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
+    }
+
     return NextResponse.json(
-      { error: "Failed to fetch user" },
-      { status: 500 }
-    );
+      {
+        success: true,
+        user: {
+          ...targetUser,
+          _id: targetUser._id.toString(),
+        },
+      },
+      { status: 200 },
+    )
+  } catch (error) {
+    console.error("Error fetching user:", error)
+    return NextResponse.json({ success: false, message: "Failed to fetch user" }, { status: 500 })
   }
 }
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { db } = await connectToDatabase();
-    const userData = await request.json();
+    const user = getUserFromRequest(request)
 
-    const result = await db
-      .collection("users")
-      .updateOne({ _id: new ObjectId(params.id) }, { $set: userData });
-
-    if (result.matchedCount === 0) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 
-    const updatedUser = await db
-      .collection("users")
-      .findOne({ _id: new ObjectId(params.id) });
+    const id = params.id
 
-    return NextResponse.json(updatedUser);
-  } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to update user" },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const { db } = await connectToDatabase();
-    const result = await db
-      .collection("users")
-      .deleteOne({ _id: new ObjectId(params.id) });
-
-    if (result.deletedCount === 0) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!ObjectId.isValid(id)) {
+      return NextResponse.json({ success: false, message: "Invalid user ID" }, { status: 400 })
     }
 
+    if (id !== user.id) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized: Can only update your own profile" },
+        { status: 403 },
+      )
+    }
+
+    const userData = await request.json()
+    const { db } = await connectToDatabase()
+
+    const updateData: any = {}
+
+    if (userData.name) updateData.name = userData.name
+    if (userData.email) {
+      const existingUser = await db.collection("users").findOne({
+        email: userData.email,
+        _id: { $ne: new ObjectId(id) },
+      })
+
+      if (existingUser) {
+        return NextResponse.json({ success: false, message: "Email already in use" }, { status: 400 })
+      }
+
+      updateData.email = userData.email
+    }
+
+    await db.collection("users").updateOne({ _id: new ObjectId(id) }, { $set: updateData })
+
+    const updatedUser = await db.collection("users").findOne({ _id: new ObjectId(id) }, { projection: { password: 0 } })
+
     return NextResponse.json(
-      { message: "User deleted successfully" },
-      { status: 200 }
-    );
+      {
+        success: true,
+        message: "Profile updated successfully",
+        user: {
+          ...updatedUser,
+          _id: updatedUser ? updatedUser._id.toString() : null,
+        },
+      },
+      { status: 200 },
+    )
   } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to delete user" },
-      { status: 500 }
-    );
+    console.error("Error updating profile:", error)
+    return NextResponse.json({ success: false, message: "Failed to update profile" }, { status: 500 })
   }
 }
