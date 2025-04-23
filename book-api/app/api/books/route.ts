@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
   try {
     const user = getUserFromRequest(request)
 
-    if (!user || user.role !== "admin") {
-      return NextResponse.json({ success: false, message: "Unauthorized: Admin access required" }, { status: 403 })
+    if (!user) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
     }
 
     const bookData = await request.json()
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection("books").insertOne({
       ...bookData,
+      userId: user.id,
       available: true,
       createdAt: new Date(),
     })
