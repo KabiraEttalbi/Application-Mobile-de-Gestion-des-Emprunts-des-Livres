@@ -1,25 +1,19 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
 import { getUserFromRequest } from "@/lib/auth-helpers"
+import { ObjectId } from "mongodb"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest) {
   try {
     const user = getUserFromRequest(request)
 
-    if (!user) {
+    if (!user || !user.id) {
       return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
-    }
-
-    const id = params.id
-
-    if (id !== user.id && user.role !== "admin") {
-      return NextResponse.json({ success: false, message: "Unauthorized access" }, { status: 403 })
     }
 
     const { db } = await connectToDatabase()
 
-    const borrows = await db.collection("borrows").find({ userId: id }).toArray()
+    const borrows = await db.collection("borrows").find({ userId: user.id }).toArray()
 
     const borrowsWithBooks = await Promise.all(
       borrows.map(async (borrow) => {

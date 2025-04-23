@@ -21,23 +21,25 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const borrows = await db.collection("borrows").find({ userId: id }).toArray()
 
-    const borrowsWithBooks = await Promise.all(
+    const books = await Promise.all(
       borrows.map(async (borrow) => {
         const book = await db.collection("books").findOne({ _id: new ObjectId(borrow.bookId) })
+        if (!book) {
+          return null;
+        }
         return {
-          ...borrow,
-          _id: borrow._id.toString(),
-          book: {
-            ...book,
-            _id: book ? book._id.toString() : null,
-          },
+          ...book,
+          _id: book._id.toString(),
+          borrowId: borrow._id.toString(),
+          borrowedAt: borrow.borrowedAt,
+          returnedAt: borrow.returnedAt,
         }
       }),
     )
 
-    return NextResponse.json({ success: true, borrows: borrowsWithBooks }, { status: 200 })
+    return NextResponse.json({ success: true, books }, { status: 200 })
   } catch (error) {
-    console.error("Error fetching user borrows:", error)
-    return NextResponse.json({ success: false, message: "Failed to fetch borrows" }, { status: 500 })
+    console.error("Error fetching user books:", error)
+    return NextResponse.json({ success: false, message: "Failed to fetch books" }, { status: 500 })
   }
 }
