@@ -1,72 +1,93 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { connectToDatabase } from "@/lib/mongodb";
-import { ObjectId } from "mongodb";
+import { type NextRequest, NextResponse } from "next/server"
+import { connectToDatabase } from "@/lib/mongodb"
+import { ObjectId } from "mongodb"
+import { getUserFromRequest } from "@/lib/auth-helpers"
 
-export async function GET(request: NextRequest) {
-  try {
-    const { db } = await connectToDatabase();
-    const borrows = await db.collection("borrows").find({}).toArray();
-    return NextResponse.json(borrows);
-  } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to fetch borrows" },
-      { status: 500 }
-    );
-  }
-}
+export const runtime = "nodejs"
 
 export async function POST(request: NextRequest) {
   try {
-    const { db } = await connectToDatabase();
-    const borrowData = await request.json();
+    const user = getUserFromRequest(request)
 
-    if (!borrowData.userId || !borrowData.bookId) {
-      return NextResponse.json(
-        { error: "User ID and Book ID are required" },
-        { status: 400 }
-      );
+    if (!user || !user.id) {
+      return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 
-    const book = await db
-      .collection("books")
-      .findOne({ _id: new ObjectId(borrowData.bookId) });
+    const { bookId } = await request.json()
+
+    if (!bookId) {
+      return NextResponse.json({ success: false, message: "Book ID is required" }, { status: 400 })
+    }
+
+    const { db } = await connectToDatabase()
+
+    const book = await db.collection("books").findOne({
+      _id: new ObjectId(bookId),
+      available: true,
+    })
 
     if (!book) {
-      return NextResponse.json({ error: "Book not found" }, { status: 404 });
+      return NextResponse.json({ success: false, message: "Book not found or not available" }, { status: 404 })
     }
 
-    if (!book.available) {
+    const borrowedCount = await db.collection("borrows").countDocuments({
+      userId: user.id,
+      returnedAt: null,
+    })
+
+    if (borrowedCount >= 3) {
       return NextResponse.json(
-        { error: "Book is not available for borrowing" },
-        { status: 400 }
-      );
+        { success: false, message: "You can only borrow up to 3 books at a time" },
+        { status: 400 },
+      )
     }
 
-    const newBorrow = {
-      userId: borrowData.userId,
-      bookId: borrowData.bookId,
-      borrowDate: new Date(),
-      returnDate: null,
-      status: "borrowed",
-    };
+    const borrow = {
+      userId: user.id,
+      bookId: book._id.toString(),
+      borrowedAt: new Date(),
+      returnedAt: null,
+    }
 
-    const result = await db.collection("borrows").insertOne(newBorrow);
+    await db.collection("borrows").insertOne(borrow)
 
-    await db
-      .collection("books")
-      .updateOne(
-        { _id: new ObjectId(borrowData.bookId) },
-        { $set: { available: false } }
-      );
+    await db.collection("books").updateOne({ _id: new ObjectId(bookId) }, { $set: { available: false } })
 
-    return NextResponse.json(
-      { ...newBorrow, _id: result.insertedId },
-      { status: 201 }
-    );
+    return NextResponse.json({ success: true, message: "Book borrowed successfully", borrow }, { status: 200 })
   } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to create borrow record" },
-      { status: 500 }
-    );
+    console.error("Error borrowing book:", error)
+    return NextResponse.json({ success: false, message: "Failed to borrow book" }, { status: 500 })
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const user = getUserFromRequest(request)
+
+    if (!user || !user.id) {
+      return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
+    }
+
+    const { db } = await connectToDatabase()
+
+    const borrows = await db.collection("borrows").find({ userId: user.id, returnedAt: null }).toArray()
+
+    const borrowsWithBooks = await Promise.all(
+      borrows.map(async (borrow) => {
+        const book = await db.collection("books").findOne({
+          _id: new ObjectId(borrow.bookId),
+        })
+
+        return {
+          ...borrow,
+          book,
+        }
+      }),
+    )
+
+    return NextResponse.json({ success: true, borrows: borrowsWithBooks }, { status: 200 })
+  } catch (error) {
+    console.error("Error fetching borrowed books:", error)
+    return NextResponse.json({ success: false, message: "Failed to fetch borrowed books" }, { status: 500 })
   }
 }
