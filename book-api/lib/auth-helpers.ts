@@ -10,7 +10,6 @@ export type UserData = {
   role: string
 }
 
-// Helper function to get user from request
 export function getUserFromRequest(request: NextRequest): UserData | null {
   const userHeader = request.headers.get("user")
   if (!userHeader) return null
@@ -22,12 +21,10 @@ export function getUserFromRequest(request: NextRequest): UserData | null {
   }
 }
 
-// Helper function to get token from request
 export function getTokenFromRequest(request: NextRequest): string | null {
   return request.cookies.get("token")?.value || request.headers.get("Authorization")?.replace("Bearer ", "") || null
 }
 
-// Verify token and return decoded data
 export async function verifyToken(token: string): Promise<UserData | null> {
   try {
     const secret = new TextEncoder().encode(process.env.JWT_SECRET || "your-secret-key")
@@ -38,12 +35,10 @@ export async function verifyToken(token: string): Promise<UserData | null> {
   }
 }
 
-// Check if user is admin
 export function isAdmin(user: UserData | null): boolean {
   return !!user && user.role === "admin"
 }
 
-// Get user from database by ID
 export async function getUserById(id: string) {
   if (!id) return null
 
