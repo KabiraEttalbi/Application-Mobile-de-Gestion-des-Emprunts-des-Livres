@@ -5,7 +5,7 @@ import { createContext, useState, useEffect, useContext } from "react"
 import * as api from "../services/api"
 
 interface User {
-  _id: string
+  id: string
   name: string
   email: string
   role: string
@@ -37,8 +37,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (storedUser) {
           try {
-            const currentUser = await api.getCurrentUser()
-            setUser(currentUser)
+            const response = await api.getCurrentUser()
+            if (response.authenticated) {
+              setUser(response.user)
+            } else {
+              await api.clearAuth()
+            }
           } catch (err) {
             await api.clearAuth()
           }
@@ -74,7 +78,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setError(null)
 
       await api.register({ name, email, password })
-      // After registration, log the user in
       await login(email, password)
     } catch (err: any) {
       setError(err.message || "Registration failed. Please try again.")

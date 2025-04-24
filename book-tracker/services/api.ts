@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
 const API_URL = "http://10.0.2.2:3000/api"
+
 const TOKEN_KEY = "auth_token"
 const USER_KEY = "user_data"
 
@@ -72,6 +73,7 @@ const apiRequest = async (endpoint: string, method = "GET", data: any = null) =>
 
     if (response.status === 401) {
       await clearAuth()
+
       throw new Error("Authentication expired. Please login again.")
     }
 
@@ -105,6 +107,7 @@ export const register = async (userData: any) => {
 
 export const logout = async () => {
   await clearAuth()
+
 }
 
 export const getCurrentUser = async () => {
@@ -132,7 +135,45 @@ export const deleteBook = async (id: string) => {
 }
 
 export const getUserBooks = async () => {
-  return await apiRequest("/users/books")
+  try {
+    const response = await apiRequest("/users/books")
+
+    console.log("getUserBooks API response:", response)
+
+    if (!response.success) {
+      console.error("API error in getUserBooks:", response.message)
+      return response
+    }
+
+    if (!response.books || !Array.isArray(response.books)) {
+      console.error("Invalid books data in getUserBooks response:", response)
+      return {
+        success: false,
+        message: "Invalid response format",
+        books: [],
+      }
+    }
+
+    const validatedBooks = response.books.map((book) => {
+      if (!book.title) book.title = "Unknown Title"
+      if (!book.author) book.author = "Unknown Author"
+      if (!book._id && book.borrowId) book._id = book.borrowId
+
+      return book
+    })
+
+    return {
+      ...response,
+      books: validatedBooks,
+    }
+  } catch (error) {
+    console.error("Error in getUserBooks:", error)
+    return {
+      success: false,
+      message: error.message || "Failed to fetch books",
+      books: [],
+    }
+  }
 }
 
 export const borrowBook = async (bookId: string) => {

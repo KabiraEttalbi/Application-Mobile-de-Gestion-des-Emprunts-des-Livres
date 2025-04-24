@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Ionicons } from "@expo/vector-icons"
 import { StatusBar } from "expo-status-bar"
 
+// Screens
 import LoginScreen from "./screens/LoginScreen"
 import BooksScreen from "./screens/BooksScreen"
 import BookDetailScreen from "./screens/BookDetailScreen"
@@ -13,10 +14,22 @@ import MyBorrowsScreen from "./screens/MyBorrowsScreen"
 import ProfileScreen from "./screens/ProfileScreen"
 import AdminScreen from "./screens/AdminScreen"
 import AddBookScreen from "./screens/AddBookScreen"
+
+// Context
 import { AuthProvider, useAuth } from "./context/AuthContext"
 
 const Stack = createStackNavigator()
 const Tab = createBottomTabNavigator()
+
+const BooksStack = () => {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="All Books" component={BooksScreen} />
+      <Stack.Screen name="Book Detail" component={BookDetailScreen} />
+      <Stack.Screen name="Add Book" component={AddBookScreen} />
+    </Stack.Navigator>
+  )
+}
 
 const MainTabs = () => {
   const { isAdmin } = useAuth()
@@ -51,16 +64,6 @@ const MainTabs = () => {
       <Tab.Screen name="Profile" component={ProfileScreen} />
       {isAdmin && <Tab.Screen name="Admin" component={AdminScreen} />}
     </Tab.Navigator>
-  )
-}
-
-const BooksStack = () => {
-  return (
-    <Stack.Navigator>
-      <Stack.Screen name="All Books" component={BooksScreen} />
-      <Stack.Screen name="Book Detail" component={BookDetailScreen} />
-      <Stack.Screen name="Add Book" component={AddBookScreen} />
-    </Stack.Navigator>
   )
 }
 
