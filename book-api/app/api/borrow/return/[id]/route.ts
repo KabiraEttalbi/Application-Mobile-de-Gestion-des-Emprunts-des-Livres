@@ -1,13 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
-import { getUserFromRequest } from "@/lib/auth-helpers"
+import { getUserIdFromToken } from "@/lib/auth-helpers"
+
+export const runtime = "nodejs"
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = getUserFromRequest(request)
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+    const user = token ? getUserIdFromToken(token) : null
 
-    if (!user || !user.id) {
+    if (!user || !user.userId) {
       return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 
@@ -21,7 +24,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const borrow = await db.collection("borrows").findOne({
       _id: new ObjectId(borrowId),
-      userId: user.id,
+      userId: user.userId,
       returnedAt: null,
     })
 

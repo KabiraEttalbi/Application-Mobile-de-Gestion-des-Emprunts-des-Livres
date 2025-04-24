@@ -1,10 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { getUserFromRequest } from "@/lib/auth-helpers"
+import { getUserIdFromToken } from "@/lib/auth-helpers"
+
+export const runtime = "nodejs"
 
 export async function GET(request: NextRequest) {
   try {
-    const user = getUserFromRequest(request)
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+    const user = token ? getUserIdFromToken(token) : null
 
     if (!user || user.role !== "admin") {
       return NextResponse.json({ success: false, message: "Unauthorized: Admin access required" }, { status: 403 })

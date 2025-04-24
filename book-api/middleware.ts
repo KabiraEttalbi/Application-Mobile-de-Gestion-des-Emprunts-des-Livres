@@ -8,7 +8,7 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname === "/api/auth" ||
     (request.nextUrl.pathname === "/api/users" && request.method === "POST")
   ) {
-    return NextResponse.next()
+    return NextResponse.next();
   }
 
   const token = request.cookies.get("token")?.value || request.headers.get("Authorization")?.replace("Bearer ", "")

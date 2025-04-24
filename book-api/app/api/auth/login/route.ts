@@ -1,7 +1,7 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { compare } from "bcrypt"
-import * as jose from "jose"
+import type { NextRequest } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
+import { comparePasswords, generateToken } from "@/lib/auth-helpers"
+import { apiResponse } from "@/lib/api-response"
 
 export const runtime = "nodejs"
 
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const { email, password } = await request.json()
 
     if (!email || !password) {
-      return NextResponse.json({ success: false, message: "Email and password are required" }, { status: 400 })
+      return apiResponse(400, { message: "Email and password are required" })
     }
 
     const { db } = await connectToDatabase()
@@ -18,52 +18,28 @@ export async function POST(request: NextRequest) {
     const user = await db.collection("users").findOne({ email })
 
     if (!user) {
-      return NextResponse.json({ success: false, message: "Invalid credentials" }, { status: 401 })
+      return apiResponse(401, { message: "Invalid credentials" })
     }
 
-    const isPasswordValid = await compare(password, user.password)
+    const isPasswordValid = await comparePasswords(password, user.password)
+
     if (!isPasswordValid) {
-      return NextResponse.json({ success: false, message: "Invalid credentials" }, { status: 401 })
+      return apiResponse(401, { message: "Invalid credentials" })
     }
 
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || "your-secret-key")
-    const token = await new jose.SignJWT({
-      id: user._id.toString(),
-      email: user.email,
-      role: user.role || "user",
-      name: user.name,
-    })
-      .setProtectedHeader({ alg: "HS256" })
-      .setExpirationTime("7d")
-      .sign(secret)
+    const token = generateToken(user)
 
-    const response = NextResponse.json(
-      {
-        success: true,
-        message: "Login successful",
-        token: token, 
-        user: {
-          id: user._id.toString(),
-          email: user.email,
-          role: user.role || "user",
-          name: user.name,
-        },
+    return apiResponse(200, {
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
       },
-      { status: 200 },
-    )
-
-    response.cookies.set({
-      name: "token",
-      value: token,
-      httpOnly: true,
-      maxAge: 60 * 60 * 24 * 7,
-      path: "/",
-      sameSite: "lax",
     })
-
-    return response
   } catch (error) {
     console.error("Login error:", error)
-    return NextResponse.json({ success: false, message: "An error occurred during login" }, { status: 500 })
+    return apiResponse(500, { message: "Internal server error" })
   }
 }

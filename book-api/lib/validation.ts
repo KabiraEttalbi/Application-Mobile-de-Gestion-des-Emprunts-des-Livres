@@ -1,29 +1,61 @@
-type ValidationResult = {
-    valid: boolean
-    errors?: Record<string, string>
-  }
-  
-  export function validateRequired(data: Record<string, any>, fields: string[]): ValidationResult {
-    const errors: Record<string, string> = {}
-  
-    for (const field of fields) {
-      if (!data[field]) {
-        errors[field] = `${field} is required`
-      }
-    }
-  
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const PASSWORD_MIN_LENGTH = 6
+
+interface ValidationResult {
+  isValid: boolean
+  message?: string
+}
+
+export const validateRegistration = (data: any): ValidationResult => {
+  const { name, email, password } = data
+
+  if (!name || !email || !password) {
     return {
-      valid: Object.keys(errors).length === 0,
-      errors: Object.keys(errors).length > 0 ? errors : undefined,
+      isValid: false,
+      message: "Name, email, and password are required",
     }
   }
-  
-  export function validateEmail(email: string): boolean {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email)
+
+  if (!EMAIL_REGEX.test(email)) {
+    return {
+      isValid: false,
+      message: "Invalid email format",
+    }
   }
-  
-  export function validateObjectId(id: string): boolean {
-    return /^[0-9a-fA-F]{24}$/.test(id)
+
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return {
+      isValid: false,
+      message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters long`,
+    }
   }
-  
+
+  return { isValid: true }
+}
+
+export const validateBook = (data: any): ValidationResult => {
+  const { title, author, isbn } = data
+
+  if (!title || !author) {
+    return {
+      isValid: false,
+      message: "Title and author are required",
+    }
+  }
+
+  return { isValid: true }
+}
+
+export const validateBorrow = (data: any): ValidationResult => {
+  const { bookId, userId } = data
+
+  if (!bookId || !userId) {
+    return {
+      isValid: false,
+      message: "Book ID and User ID are required",
+    }
+  }
+
+  return { isValid: true }
+}

@@ -1,29 +1,43 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse, type NextRequest } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
+import { apiResponse, errorResponse } from "@/lib/api-response"
+import { getUserRoleFromToken } from "@/lib/auth-helpers"
 import { hash } from "bcrypt"
-import { getUserFromRequest } from "@/lib/auth-helpers"
 
 export const runtime = "nodejs"
 
 export async function GET(request: NextRequest) {
   try {
-    const user = getUserFromRequest(request)
+    const authHeader = request.headers.get("Authorization")
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return errorResponse(401, "Authentication required")
+    }
 
-    if (!user || user.role !== "admin") {
-      return NextResponse.json({ success: false, message: "Unauthorized: Admin access required" }, { status: 403 })
+    const token = authHeader.split(" ")[1]
+    const role = getUserRoleFromToken(token)
+
+    if (!role) {
+      return errorResponse(401, "Invalid token")
     }
 
     const { db } = await connectToDatabase()
-    const users = await db
-      .collection("users")
-      .find({})
-      .project({ password: 0 }) 
-      .toArray()
 
-    return NextResponse.json({ success: true, users }, { status: 200 })
+    const { searchParams } = new URL(request.url)
+    const name = searchParams.get("name")
+    const email = searchParams.get("email")
+
+    const query: any = {}
+    if (name) query.name = { $regex: name, $options: "i" }
+    if (email) query.email = { $regex: email, $options: "i" }
+
+    const projection = role === "admin" ? { password: 0 } : { password: 0, email: 0, createdAt: 0, updatedAt: 0 }
+
+    const users = await db.collection("users").find(query).project(projection).toArray()
+
+    return apiResponse(200, { users })
   } catch (error) {
     console.error("Error fetching users:", error)
-    return NextResponse.json({ success: false, message: "Failed to fetch users" }, { status: 500 })
+    return errorResponse(500, "Internal server error")
   }
 }
 

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { getUserFromRequest } from "@/lib/auth-helpers"
+import { getUserIdFromToken } from "@/lib/auth-helpers"
 
 export const runtime = "nodejs"
 
@@ -18,10 +18,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const user = getUserFromRequest(request)
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+    if (!token) {
+      return NextResponse.json({ success: false, message: "Unauthorized: Token missing" }, { status: 401 })
+    }
+
+    const user = getUserIdFromToken(token)
 
     if (!user) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ success: false, message: "Unauthorized: Admin access required" }, { status: 403 })
     }
 
     const bookData = await request.json()
@@ -34,9 +39,9 @@ export async function POST(request: NextRequest) {
 
     const result = await db.collection("books").insertOne({
       ...bookData,
-      userId: user.id,
       available: true,
       createdAt: new Date(),
+      addedBy: user.userId,
     })
 
     const book = await db.collection("books").findOne({ _id: result.insertedId })
@@ -47,3 +52,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message: "Failed to create book" }, { status: 500 })
   }
 }
+

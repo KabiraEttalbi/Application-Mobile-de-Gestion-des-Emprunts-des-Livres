@@ -1,11 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
-import { getUserFromRequest } from "@/lib/auth-helpers"
+import { getUserIdFromToken } from "@/lib/auth-helpers"
+
+export const runtime = "nodejs"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = getUserFromRequest(request)
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+    const user = token ? getUserIdFromToken(token) : null
 
     if (!user) {
       return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
@@ -13,7 +16,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const id = params.id
 
-    if (id !== user.id && user.role !== "admin") {
+    if (id !== user.userId && user.role !== "admin") {
       return NextResponse.json({ success: false, message: "Unauthorized access" }, { status: 403 })
     }
 
@@ -29,7 +32,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           _id: borrow._id.toString(),
           book: {
             ...book,
-            _id: book ? book._id.toString() : null,
+            _id: book?._id.toString(),
           },
         }
       }),

@@ -1,61 +1,55 @@
-import { type NextRequest, NextResponse } from "next/server"
-import * as jose from "jose"
+import type { NextRequest } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
-import { ObjectId } from "mongodb"
+import { hashPassword, generateToken } from "@/lib/auth-helpers"
+import { apiResponse } from "@/lib/api-response"
+import { validateRegistration } from "@/lib/validation"
 
 export const runtime = "nodejs"
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
   try {
-    const token = request.cookies.get("token")?.value || request.headers.get("Authorization")?.replace("Bearer ", "")
+    const userData = await request.json()
 
-    if (!token) {
-      return NextResponse.json({ success: false, authenticated: false }, { status: 401 })
+    const validationResult = validateRegistration(userData)
+    if (!validationResult.isValid) {
+      return apiResponse(400, { message: validationResult.message })
     }
 
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET || "your-secret-key")
-    const { payload } = await jose.jwtVerify(token, secret)
-    const decoded = payload as { id: string; email: string; role: string; name: string }
+    const { name, email, password } = userData
 
     const { db } = await connectToDatabase()
 
-    const user = await db
-      .collection("users")
-      .findOne({ _id: new ObjectId(decoded.id) }, { projection: { password: 0 } })
+    const existingUser = await db.collection("users").findOne({ email })
 
-    if (!user) {
-      return NextResponse.json({ success: false, authenticated: false }, { status: 401 })
+    if (existingUser) {
+      return apiResponse(409, { message: "User already exists with this email" })
     }
 
-    return NextResponse.json({
-      success: true,
-      authenticated: true,
+    const hashedPassword = await hashPassword(password)
+
+    const result = await db.collection("users").insertOne({
+      name,
+      email,
+      password: hashedPassword,
+      role: "user",
+      createdAt: new Date(),
+    })
+
+    const newUser = await db.collection("users").findOne({ _id: result.insertedId })
+
+    const token = generateToken(newUser)
+
+    return apiResponse(201, {
+      token,
       user: {
-        id: user._id.toString(),
-        email: user.email,
-        role: user.role || "user",
-        name: user.name,
+        _id: newUser?._id,
+        name: newUser?.name,
+        email: newUser?.email,
+        role: newUser?.role,
       },
     })
   } catch (error) {
-    console.error("Authentication check error:", error)
-    return NextResponse.json({ success: false, authenticated: false }, { status: 401 })
+    console.error("Registration error:", error)
+    return apiResponse(500, { message: "Internal server error" })
   }
-}
-
-export async function POST(request: NextRequest) {
-  const response = NextResponse.json({
-    success: true,
-    message: "Logged out successfully",
-  })
-
-  response.cookies.set({
-    name: "token",
-    value: "",
-    httpOnly: true,
-    expires: new Date(0),
-    path: "/",
-  })
-
-  return response
 }

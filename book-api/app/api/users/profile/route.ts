@@ -1,14 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
-import { getUserFromRequest } from "@/lib/auth-helpers"
 import { hash } from "bcrypt"
+import { getUserIdFromToken } from "@/lib/auth-helpers"
+
+export const runtime = "nodejs"
 
 export async function GET(request: NextRequest) {
   try {
-    const user = getUserFromRequest(request)
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+    const user = token ? getUserIdFromToken(token) : null
 
-    if (!user || !user.id) {
+    if (!user || !user.userId) {
       return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 
@@ -16,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     const userProfile = await db
       .collection("users")
-      .findOne({ _id: new ObjectId(user.id) }, { projection: { password: 0 } })
+      .findOne({ _id: new ObjectId(user.userId) }, { projection: { password: 0 } })
 
     if (!userProfile) {
       return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
@@ -40,9 +43,10 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const user = getUserFromRequest(request)
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+    const user = token ? getUserIdFromToken(token) : null
 
-    if (!user || !user.id) {
+    if (!user || !user.userId) {
       return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 
@@ -58,11 +62,11 @@ export async function PUT(request: NextRequest) {
       updateData.password = await hash(userData.password, 10)
     }
 
-    await db.collection("users").updateOne({ _id: new ObjectId(user.id) }, { $set: updateData })
+    await db.collection("users").updateOne({ _id: new ObjectId(user.userId) }, { $set: updateData })
 
     const updatedUser = await db
       .collection("users")
-      .findOne({ _id: new ObjectId(user.id) }, { projection: { password: 0 } })
+      .findOne({ _id: new ObjectId(user.userId) }, { projection: { password: 0 } })
 
     return NextResponse.json(
       {
@@ -70,7 +74,7 @@ export async function PUT(request: NextRequest) {
         message: "Profile updated successfully",
         user: {
           ...updatedUser,
-          _id: updatedUser ? updatedUser._id.toString() : null,
+          _id: updatedUser?._id.toString(),
         },
       },
       { status: 200 },

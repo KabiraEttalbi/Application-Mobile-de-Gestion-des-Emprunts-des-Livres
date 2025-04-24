@@ -1,11 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
-import { getUserFromRequest } from "@/lib/auth-helpers"
+import { getUserIdFromToken } from "@/lib/auth-helpers"
+
+export const runtime = "nodejs"
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = getUserFromRequest(request)
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "")
+    const user = token ? getUserIdFromToken(token) : null
 
     if (!user || user.role !== "admin") {
       return NextResponse.json({ success: false, message: "Unauthorized: Admin access required" }, { status: 403 })
@@ -31,7 +34,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ success: false, message: "User not found" }, { status: 404 })
     }
 
-    if (id === user.id) {
+    if (id === user.userId) {
       return NextResponse.json({ success: false, message: "Cannot change your own role" }, { status: 400 })
     }
 
@@ -45,7 +48,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         message: "User role updated successfully",
         user: {
           ...updatedUser,
-          _id: updatedUser ? updatedUser._id.toString() : null,
+          _id: updatedUser?._id.toString(),
         },
       },
       { status: 200 },
